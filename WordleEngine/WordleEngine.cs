@@ -105,13 +105,12 @@ namespace WordleEngine
                 possibleWords.Remove(word);
             }
         }
-        Dictionary<int,double> GetProbabilites(string guess)
+        Dictionary<int, double> GetProbabilites(string guess)
         {
             Dictionary<int, double> outputs = new Dictionary<int, double>();
-            foreach(var answer in possibleWords)
+            foreach (var answer in possibleWords)
             {
                 WordleMask mask = Compare(guess, answer);
-
                 if (outputs.ContainsKey(mask.GetHashCode()) == false)
                 {
                     outputs.Add(mask.GetHashCode(), 0);
@@ -121,7 +120,6 @@ namespace WordleEngine
             }
             return outputs;
         }
-
         static WordleMask Compare(string guess, string trueAnswer)
         {
             var outcomes = new List<LetterMatchOutcome>();
@@ -180,7 +178,7 @@ namespace WordleEngine
         {
             for (int i = wordSize - 1; i >= 0; i--)
             {
-                if (guess[i] == repeatedChar && outcomes[i]==LetterMatchOutcome.Yellow)
+                if (guess[i] == repeatedChar && outcomes[i] == LetterMatchOutcome.Yellow)
                 {
                     outcomes[i] = LetterMatchOutcome.Grey;
                     return;
@@ -208,7 +206,6 @@ namespace WordleEngine
             ElapsedMilliseconds = time;
             NumberOfPossibilites = number;
         }
-
     }
     public enum LetterMatchOutcome
     {

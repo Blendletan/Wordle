@@ -37,7 +37,7 @@
         static void PlayWordle(WordleEngine engine)
         {
             Console.WriteLine($"First guess should be {engine.FirstGuess()}");
-            for(int i = 0; i < 5; i++)
+            for (int i = 0; i < 5; i++)
             {
                 var nextResult = GetNextResult(engine);
                 engine.UpdateInfo(nextResult.Item1, nextResult.Item2);
