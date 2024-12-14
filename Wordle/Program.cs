@@ -8,14 +8,30 @@
         static void Main(string[] args)
         {
             WordleEngine engine;
-            using (var reader = new StreamReader(filePath))
+            try
             {
-                engine = new WordleEngine(reader);
+                using (var reader = new StreamReader(filePath))
+                {
+                    engine = new WordleEngine(reader);
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Cannot find dictionary file words.txt");
+                Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
+                return;
             }
             while (true)
             {
-                PlayWordle(engine);
-                engine.Reset();
+                try
+                {
+                    PlayWordle(engine);
+                    engine.Reset();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.Message);
+                }
             }
         }
         static void PlayWordle(WordleEngine engine)
