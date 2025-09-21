@@ -61,6 +61,13 @@ namespace WordleEngine
             }
             foreach (var word in permissibleWords)
             {
+                if (possibleWords.Count == 2)
+                {
+                    if (possibleWords.Contains(word) == false)
+                    {
+                        continue;
+                    }
+                }
                 double expectedWordValue = 0;
                 var maskProbabilities = GetProbabilites(word);
                 foreach (var maskProbability in maskProbabilities)
@@ -69,7 +76,7 @@ namespace WordleEngine
                     double numberOfWordsRuledOut = (1 - probabilityOfGuess) * possibleWords.Count;
                     expectedWordValue += probabilityOfGuess * numberOfWordsRuledOut;
                 }
-                if (bestGuess == null)
+                if (bestGuess == null && expectedWordValue > 0)
                 {
                     bestGuess = word;
                     bestGuessValue = expectedWordValue;
@@ -79,6 +86,10 @@ namespace WordleEngine
                     secondBestGuess = bestGuess;
                     bestGuess = word;
                     bestGuessValue = expectedWordValue;
+                }
+                else if (secondBestGuess == null)
+                {
+                    secondBestGuess = word;
                 }
             }
             if (bestGuess == null)

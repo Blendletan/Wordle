@@ -1,5 +1,6 @@
 ﻿namespace Wordle
 {
+    using System.Reflection.PortableExecutable;
     using WordleEngine;
     internal class Program
     {
@@ -31,6 +32,7 @@
                 catch (Exception e)
                 {
                     Console.WriteLine(e.Message);
+                    engine.Reset();
                 }
             }
         }
