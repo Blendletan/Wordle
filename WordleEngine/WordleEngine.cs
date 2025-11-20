@@ -13,22 +13,30 @@ namespace WordleEngine
         public WordleEngine(TextReader reader)
         {
             sw = new Stopwatch();
-            possibleWords = new List<string>();
-            permissibleWords = new List<string>();
+            possibleWords = ReadFile(reader);
+            permissibleWords = new List<string>(possibleWords);
+        }
+        public List<string> GetDictionary()
+        {
+            return new List<string>(permissibleWords);
+        }
+        public static List<string> ReadFile(TextReader reader)
+        {
             string? nextLine = reader.ReadLine();
             if (nextLine == null)
             {
                 throw new Exception("Invalid Dictionary file");
             }
+            var output = new List<string>();
             while (nextLine != null)
             {
                 if (nextLine.Count() == wordSize)
                 {
-                    permissibleWords.Add(nextLine.ToLower());
-                    possibleWords.Add(nextLine.ToLower());
+                    output.Add(nextLine.ToLower());
                 }
                 nextLine = reader.ReadLine();
             }
+            return output;
         }
         public void Reset()
         {
@@ -131,7 +139,7 @@ namespace WordleEngine
             }
             return outputs;
         }
-        static WordleMask Compare(string guess, string trueAnswer)
+        public static WordleMask Compare(string guess, string trueAnswer)
         {
             var outcomes = new List<LetterMatchOutcome>();
             for (int i = 0; i < wordSize; i++)
@@ -230,6 +238,17 @@ namespace WordleEngine
         public WordleMask(List<LetterMatchOutcome> input)
         {
             mask = input.ToArray();
+        }
+        public bool Win()
+        {
+            for (int i = 0; i < mask.Length; i++)
+            {
+                if (mask[i] != LetterMatchOutcome.Green)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
         public override int GetHashCode()
         {
