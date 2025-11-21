@@ -30,8 +30,9 @@
             }
             Console.WriteLine($"There are {dictionarySize} words in the dictionary");
             TextWriter writer = new StreamWriter("output2.txt");
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 2000; i++)
             {
+                Console.WriteLine($"Beginning game {i + 1}");
                 writer.WriteLine($"Beginning game {i+1}");
                 var outcome = SimulateWordleGame(engine, giver);
                 var options = new JsonSerializerOptions();
@@ -77,6 +78,8 @@
                     return output;
                 }
             }
+            engine.Reset();
+            giver.Reset(engine.GetDictionary());
             return output;
         }
     }
