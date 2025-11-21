@@ -35,18 +35,11 @@
                 writer.WriteLine($"Beginning game {i+1}");
                 var outcome = SimulateWordleGame(engine, giver);
                 var options = new JsonSerializerOptions();
-                options.IncludeFields = true;
                 string output = JsonSerializer.Serialize<WordleGameInfo>(outcome,options);
                 writer.WriteLine(output);
                 writer.WriteLine();
             }
             writer.Close();
-            StreamReader testReader = new StreamReader("output2.txt");
-            testReader.ReadLine();
-            string serialized = testReader.ReadLine();
-            var result = ReadInfo(serialized);
-            Console.WriteLine(result.guesses.Count);
-            testReader.Close();
         }
         static WordleGameInfo ReadInfo(string serialized)
         {
@@ -62,7 +55,8 @@
             var output = new WordleGameInfo(giver.TrueAnswer);
             string guess = engine.FirstGuess();
             var outcome = giver.CheckAnswer(guess);
-            output.Update(guess, outcome);
+            int wordsRemaining = engine.NumberOfRemainingWords();
+            output.Update(guess, outcome, wordsRemaining);
             if (outcome.Win())
             {
                 engine.Reset();
@@ -74,7 +68,8 @@
                 engine.UpdateInfo(guess, outcome);
                 guess = engine.NextGuess().BestGuess;
                 outcome = giver.CheckAnswer(guess);
-                output.Update(guess, outcome);
+                wordsRemaining = engine.NumberOfRemainingWords();
+                output.Update(guess, outcome,wordsRemaining);
                 if (outcome.Win())
                 {
                     engine.Reset();

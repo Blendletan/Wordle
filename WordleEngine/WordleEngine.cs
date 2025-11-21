@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 namespace WordleEngine
 {
     public class WordleEngine
@@ -19,6 +20,10 @@ namespace WordleEngine
         public List<string> GetDictionary()
         {
             return new List<string>(permissibleWords);
+        }
+        public int NumberOfRemainingWords()
+        {
+            return possibleWords.Count;
         }
         public static List<string> ReadFile(TextReader reader)
         {

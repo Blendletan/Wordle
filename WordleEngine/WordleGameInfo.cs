@@ -2,30 +2,44 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 namespace WordleEngine
 {
     public class WordleGameInfo
     {
-        public List<string> guesses;
-        public List<WordleMask> results;
-        public string trueAnswer;
-        public bool gameWon;
+        public List<string> Guesses { get; set; }
+        public List<int[]> Results { get; set; }
+        public List<int> PossibilitiesRemaining { get; set; }
+        public string TrueAnswer { get; set; }
+        public bool GameWon { get; set; }
         public WordleGameInfo(string answer)
         {
-            guesses = new List<string>();
-            results = new List<WordleMask>();
-            trueAnswer = answer;
-            gameWon = false;
+            Guesses = new List<string>();
+            Results = new List<int[]>();
+            PossibilitiesRemaining = new List<int>();
+            TrueAnswer = answer;
+            GameWon = false;
         }
-        public void Update(string guess, WordleMask result)
+        public void Update(string guess, WordleMask result,int possibilities)
         {
-            guesses.Add(guess);
-            results.Add(result);
+            Guesses.Add(guess);
+            Results.Add(result.mask.Select(x=>(int)x).ToArray());
+            PossibilitiesRemaining.Add(possibilities);
             if (result.Win())
             {
-                gameWon = true;
+                GameWon = true;
             }
+        }
+        [JsonConstructor]
+        public WordleGameInfo(List<string> guesses, List<int[]> results, List<int> possibilitiesRemaining, string trueAnswer, bool gameWon)
+        {
+            Guesses = guesses;
+            Results = results;
+            PossibilitiesRemaining = possibilitiesRemaining;
+            TrueAnswer = trueAnswer;
+            GameWon = gameWon;
         }
     }
 }
