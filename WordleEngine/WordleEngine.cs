@@ -27,13 +27,12 @@ namespace WordleEngine
             }
             for (int i = 0; i < numberOfWords; i++)
             {
-                for (int j = i; j < numberOfWords; j++)
+                for (int j = 0; j < numberOfWords; j++)
                 {
                     string firstWord = permissibleWords[i];
                     string secondWord = permissibleWords[j];
                     WordleMask comparison = Compare(firstWord, secondWord);
                     wordComparisons[i, j] = comparison;
-                    wordComparisons[j, i] = comparison;
                 }
             }
         }
@@ -83,6 +82,18 @@ namespace WordleEngine
             string? bestGuess = null;
             double? bestGuessValue = null;
             string? secondBestGuess = null;
+            if (numberOfPossibleWords == 1)
+            {
+                for (int i = 0; i < permissibleWords.Length; i++)
+                {
+                    if (wordIsPossible[i])
+                    {
+                        sw.Stop();
+                        output = new WordleGuessInformation(permissibleWords[i], secondBestGuess, sw.ElapsedMilliseconds, numberOfPossibleWords);
+                        return output;
+                    }
+                }
+            }
             for (int i = 0; i < permissibleWords.Length; i++)
             {
                 if (wordIsPossible[i] == false)
@@ -96,21 +107,21 @@ namespace WordleEngine
                     double probabilityOfGuess = maskProbability.Value;
                     double numberOfWordsRuledOut = (1 - probabilityOfGuess) * numberOfPossibleWords;
                     expectedWordValue += probabilityOfGuess * numberOfWordsRuledOut;
-                    if (bestGuess == null && expectedWordValue > 0)
-                    {
-                        bestGuess = permissibleWords[i];
-                        bestGuessValue = expectedWordValue;
-                    }
-                    else if (expectedWordValue > bestGuessValue)
-                    {
-                        secondBestGuess = bestGuess;
-                        bestGuess = permissibleWords[i];
-                        bestGuessValue = expectedWordValue;
-                    }
-                    else if (secondBestGuess == null)
-                    {
-                        secondBestGuess = permissibleWords[i];
-                    }
+                }
+                if (bestGuess == null && expectedWordValue > 0)
+                {
+                    bestGuess = permissibleWords[i];
+                    bestGuessValue = expectedWordValue;
+                }
+                else if (expectedWordValue > bestGuessValue)
+                {
+                    secondBestGuess = bestGuess;
+                    bestGuess = permissibleWords[i];
+                    bestGuessValue = expectedWordValue;
+                }
+                else if (secondBestGuess == null)
+                {
+                    secondBestGuess = permissibleWords[i];
                 }
             }
             if (bestGuess == null)
@@ -167,7 +178,10 @@ namespace WordleEngine
                     outputs.Add(mask.GetHashCode(), 0);
                 }
                 outputs[mask.GetHashCode()]++;
-                outputs[mask.GetHashCode()] /= (double)numberOfPossibleWords;
+            }
+            foreach(var v in outputs)
+            {
+                outputs[v.Key] /= (double)numberOfPossibleWords;
             }
             return outputs;
         }
@@ -196,7 +210,7 @@ namespace WordleEngine
         {
             var guessHistogram = GenerateLetterHistogram(guess);
             var answerHistogram = GenerateLetterHistogram(trueAnswer);
-            foreach (char c in trueAnswer)
+            foreach (char c in answerHistogram.Keys)
             {
                 if (guessHistogram.ContainsKey(c) == false)
                 {
