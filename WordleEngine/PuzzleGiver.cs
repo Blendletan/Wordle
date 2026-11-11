@@ -13,6 +13,10 @@ namespace WordleEngine
         {
             TrueAnswer = GenerateAnswer(words);
         }
+        public PuzzleGiver(string word)
+        {
+            TrueAnswer = word;
+        }
         static string GenerateAnswer(List<string> possibleWords)
         {
             var rng = new Random();

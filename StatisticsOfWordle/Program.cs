@@ -9,14 +9,69 @@
         const string dictionaryPath = "words.txt";
         static void Main(string[] args)
         {
-            ShowStatistics("output.txt");
-            RunSimulation(5000, "outputLarge.txt");
+            //ShowStatistics("outputLarge.txt");
+            //RunSimulation(5000, "outputLarge.txt");
+            //SimulateParticularGame("eerie");
+        }
+        /*
+        static void SimulateParticularGame(string word)
+        {
+            WordleEngine engine;
+            PuzzleGiver giver;
+            try
+            {
+                using (var reader = new StreamReader(dictionaryPath))
+                {
+                    engine = new WordleEngine(reader);
+                    giver = new PuzzleGiver(word);
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Cannot find dictionary file words.txt");
+                Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
+                return;
+            }
+            string guess = engine.FirstGuess();
+            Console.WriteLine($"Computer guesses {guess}");
+            var outcome = giver.CheckAnswer(guess);
+            Console.WriteLine($"{outcome.mask[0]} {outcome.mask[1]} {outcome.mask[2]} {outcome.mask[3]} {outcome.mask[4]}");
+            int wordsRemaining = engine.NumberOfRemainingWords();
+            Console.WriteLine($"There are {wordsRemaining} words remaining");
+            if (outcome.Win())
+            {
+                Console.WriteLine("Computer won in 1 guess");
+                engine.Reset();
+                giver.Reset(engine.GetDictionary());
+                return;
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                engine.UpdateInfo(guess, outcome);
+                guess = engine.NextGuess().BestGuess;
+                outcome = giver.CheckAnswer(guess);
+                wordsRemaining = engine.NumberOfRemainingWords();
+                Console.WriteLine($"Computer guesses {guess}");
+                Console.WriteLine($"{outcome.mask[0]} {outcome.mask[1]} {outcome.mask[2]} {outcome.mask[3]} {outcome.mask[4]}");
+                Console.WriteLine($"There are {wordsRemaining} words remaining");
+                if (outcome.Win())
+                {
+                    engine.Reset();
+                    giver.Reset(engine.GetDictionary());
+                    Console.WriteLine($"Computer won in {i + 1} guesses");
+                    return;
+                }
+            }
+            engine.Reset();
+            giver.Reset(engine.GetDictionary());
+            return;
         }
         static void ShowStatistics(string dataFile)
         {
             var reader = new StreamReader(dataFile);
             int[] results = new int[7];
-            Dictionary<string, int> secondGuesses = new Dictionary<string, int>();
+            var secondGuesses = new Dictionary<string, int>();
+            var thirdGuesses = new Dictionary<string, int>();
             string? nextLine = reader.ReadLine();
             while (true)
             {
@@ -40,6 +95,15 @@
                     }
                     secondGuesses[secondGuess]++;
                 }
+                if (gameInfo.Guesses.Count > 2)
+                {
+                    string thirdGuess = gameInfo.Guesses[2];
+                    if (thirdGuesses.ContainsKey(thirdGuess) == false)
+                    {
+                        thirdGuesses.Add(thirdGuess, 0);
+                    }
+                    thirdGuesses[thirdGuess]++;
+                }
                 nextLine = reader.ReadLine();
             }
             reader.Dispose();
@@ -55,10 +119,24 @@
             var myList = secondGuesses.ToList();
             myList.Sort((x, y) => x.Value.CompareTo(y.Value));
             myList.Reverse();
-            for (int i = 1; i <= 10; i++)
+            double total = myList.Sum(x => x.Value);
+            Console.WriteLine($"There were {(int)total} games that went for at least two turns");
+            for (int i = 1; i <= 25; i++)
             {
                 var guess = myList[i - 1];
-                Console.WriteLine($"Second guess number {i} was {guess.Key} with {guess.Value} appearances");
+                double percentage = 100.0 * (double)guess.Value / (double)total;
+                Console.WriteLine($"Second guess number {i} was {guess.Key} with {guess.Value} appearances or {percentage}%");
+            }
+            myList = thirdGuesses.ToList();
+            myList.Sort((x, y) => x.Value.CompareTo(y.Value));
+            myList.Reverse();
+            total = myList.Sum(x => x.Value);
+            Console.WriteLine($"There were {(int)total} games that went for at least three turns");
+            for (int i = 1; i <= 25; i++)
+            {
+                var guess = myList[i - 1];
+                double percentage = 100.0 * (double)guess.Value / (double)total;
+                Console.WriteLine($"Third guess number {i} was {guess.Key} with {guess.Value} appearances or {percentage}%");
             }
         }
         static void CleanUpDataFile(string inputFilePath, string outputFilePath)
@@ -158,7 +236,7 @@
                 guess = engine.NextGuess().BestGuess;
                 outcome = giver.CheckAnswer(guess);
                 wordsRemaining = engine.NumberOfRemainingWords();
-                output.Update(guess, outcome,wordsRemaining);
+                output.Update(guess, outcome, wordsRemaining);
                 if (outcome.Win())
                 {
                     engine.Reset();
@@ -169,6 +247,6 @@
             engine.Reset();
             giver.Reset(engine.GetDictionary());
             return output;
-        }
+        }*/
     }
 }
