@@ -23,10 +23,6 @@ namespace WordleEngine
             int index = rng.Next(possibleWords.Count);
             return possibleWords[index];
         }
-        public WordleMask CheckAnswer(string guess)
-        {
-            return WordleEngine.Compare(guess, TrueAnswer);
-        }
         public void Reset(List<string> words)
         {
             TrueAnswer = GenerateAnswer(words);

@@ -10,36 +10,27 @@ namespace WordleEngine
     public class WordleGameInfo
     {
         public List<string> Guesses { get; set; }
-        public List<int[]> Results { get; set; }
+        public List<LetterMatchOutcome[]> Results { get; set; }
         public List<int> PossibilitiesRemaining { get; set; }
         public string TrueAnswer { get; set; }
         public bool GameWon { get; set; }
         public WordleGameInfo(string answer)
         {
             Guesses = new List<string>();
-            Results = new List<int[]>();
+            Results = new List<LetterMatchOutcome[]>();
             PossibilitiesRemaining = new List<int>();
             TrueAnswer = answer;
             GameWon = false;
         }
-        public void Update(string guess, WordleMask result,int possibilities)
+        public void Update(string guess, byte result,int possibilities)
         {
             Guesses.Add(guess);
-            Results.Add(result.mask.Select(x=>(int)x).ToArray());
+            Results.Add(WordleOutcome.GetLetterOutcomes(result));
             PossibilitiesRemaining.Add(possibilities);
-            if (result.Win())
+            if (WordleOutcome.Win(result))
             {
                 GameWon = true;
             }
-        }
-        [JsonConstructor]
-        public WordleGameInfo(List<string> guesses, List<int[]> results, List<int> possibilitiesRemaining, string trueAnswer, bool gameWon)
-        {
-            Guesses = guesses;
-            Results = results;
-            PossibilitiesRemaining = possibilitiesRemaining;
-            TrueAnswer = trueAnswer;
-            GameWon = gameWon;
         }
     }
 }

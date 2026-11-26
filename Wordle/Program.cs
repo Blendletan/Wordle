@@ -1,27 +1,30 @@
 ﻿namespace Wordle
 {
+    using Newtonsoft.Json;
+    using System.Diagnostics;
     using System.Reflection.PortableExecutable;
+    using System.Text.Json;
     using WordleEngine;
     internal class Program
     {
         //place a dictionary file named words.txt in the same folder as the executable
-        const string filePath = "words.txt";
+        const string dictionaryFilePath = "words.txt";
         static void Main(string[] args)
         {
-            WordleEngine engine;
-            try
             {
-                using (var reader = new StreamReader(filePath))
+                WordleEngine? engine = null;
+                if (File.Exists(dictionaryFilePath) == false)
                 {
-                    engine = new WordleEngine(reader);
+                    Console.WriteLine("Cannot find words.txt");
+                    return;
                 }
+                using var reader = new StreamReader(dictionaryFilePath);
+                engine = new WordleEngine(reader);
+                PlayWordleLoop(engine);
             }
-            catch
-            {
-                Console.WriteLine("Cannot find dictionary file words.txt");
-                Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
-                return;
-            }
+        }
+        static void PlayWordleLoop(WordleEngine engine)
+        {
             while (true)
             {
                 try
@@ -100,7 +103,7 @@
             }
             return attemptedOutcome.Value;
         }
-        static (string, WordleMask) GetNextResult(WordleEngine engine)
+        static (string, byte) GetNextResult(WordleEngine engine)
         {
             string? attemptedInput = null;
             while (true)
@@ -115,12 +118,12 @@
                     }
                 }
             }
-            var outcome = new List<LetterMatchOutcome>();
-            for (int i = 0; i < WordleEngine.wordSize; i++)
+            var outcome = new LetterMatchOutcome[GlobalConstants.WordSize];
+            for (int i = 0; i < GlobalConstants.WordSize; i++)
             {
-                outcome.Add(GetNextLetterOutcome(i));
+                outcome[i]=GetNextLetterOutcome(i);
             }
-            return (attemptedInput, new WordleMask(outcome));
+            return (attemptedInput, WordleOutcome.GetMask(outcome));
         }
     }
 }

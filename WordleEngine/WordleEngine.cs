@@ -1,26 +1,26 @@
 ﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
-using System.Text.Json.Serialization;
 namespace WordleEngine
 {
     public class WordleEngine
     {
         Stopwatch sw;
-        public const int wordSize = 5;
         readonly string[] permissibleWords;
         bool[] wordIsPossible;
         int numberOfPossibleWords;
-        WordleMask[,] wordComparisons;
-        //const string firstGuess = "tares";
+        int[,] wordComparisons;
+        bool firstGuesmade;
+        const string firstGuess = "tares";
         public WordleEngine(TextReader reader)
         {
             sw = new Stopwatch();
-            permissibleWords = ReadFile(reader).ToArray();
+            permissibleWords = ReadDictionaryFile(reader).ToArray();
             int numberOfWords = permissibleWords.Length;
             wordIsPossible = new bool[numberOfWords];
             numberOfPossibleWords = numberOfWords;
-            wordComparisons = new WordleMask[numberOfWords, numberOfWords];
+            wordComparisons = new int[numberOfWords, numberOfWords];
             for (int i = 0; i < numberOfWords; i++)
             {
                 wordIsPossible[i] = true;
@@ -31,8 +31,8 @@ namespace WordleEngine
                 {
                     string firstWord = permissibleWords[i];
                     string secondWord = permissibleWords[j];
-                    WordleMask comparison = Compare(firstWord, secondWord);
-                    wordComparisons[i, j] = comparison;
+                    byte comparison = WordleOutcome.Compare(firstWord, secondWord);
+                    wordComparisons[i,j]= comparison;
                 }
             }
         }
@@ -40,7 +40,7 @@ namespace WordleEngine
         {
             return new List<string>(permissibleWords);
         }
-        public static List<string> ReadFile(TextReader reader)
+        public static List<string> ReadDictionaryFile(TextReader reader)
         {
             string? nextLine = reader.ReadLine();
             if (nextLine == null)
@@ -50,7 +50,7 @@ namespace WordleEngine
             var output = new List<string>();
             while (nextLine != null)
             {
-                if (nextLine.Count() == wordSize)
+                if (nextLine.Count() == GlobalConstants.WordSize)
                 {
                     output.Add(nextLine.ToLower());
                 }
@@ -82,6 +82,7 @@ namespace WordleEngine
             string? bestGuess = null;
             double? bestGuessValue = null;
             string? secondBestGuess = null;
+            double? secondBestGuessValue = null;
             if (numberOfPossibleWords == 1)
             {
                 for (int i = 0; i < permissibleWords.Length; i++)
@@ -96,15 +97,12 @@ namespace WordleEngine
             }
             for (int i = 0; i < permissibleWords.Length; i++)
             {
-                if (wordIsPossible[i] == false)
-                {
-                    continue;
-                }
                 double expectedWordValue = 0;
                 var maskProbabilities = GetProbabilites(i);
-                foreach (var maskProbability in maskProbabilities)
+                for(int j=0;j<WordleOutcome.NumberOfMasks;j++)
                 {
-                    double probabilityOfGuess = maskProbability.Value;
+                    var maskProbability = maskProbabilities[j];
+                    double probabilityOfGuess = maskProbability;
                     double numberOfWordsRuledOut = (1 - probabilityOfGuess) * numberOfPossibleWords;
                     expectedWordValue += probabilityOfGuess * numberOfWordsRuledOut;
                 }
@@ -116,12 +114,14 @@ namespace WordleEngine
                 else if (expectedWordValue > bestGuessValue)
                 {
                     secondBestGuess = bestGuess;
+                    secondBestGuessValue = bestGuessValue;
                     bestGuess = permissibleWords[i];
                     bestGuessValue = expectedWordValue;
                 }
-                else if (secondBestGuess == null)
+                else if (secondBestGuess == null || expectedWordValue > secondBestGuessValue)
                 {
                     secondBestGuess = permissibleWords[i];
+                    secondBestGuessValue = expectedWordValue;
                 }
             }
             if (bestGuess == null)
@@ -132,7 +132,7 @@ namespace WordleEngine
             output = new WordleGuessInformation(bestGuess, secondBestGuess, sw.ElapsedMilliseconds, numberOfPossibleWords);
             return output;
         }
-        public void UpdateInfo(string guess, WordleMask guessOutcome)
+        public void UpdateInfo(string guess, byte guessOutcome)
         {
             int guessedWordIndex = -1;
             for (int i=0;i<permissibleWords.Length;i++)
@@ -147,7 +147,6 @@ namespace WordleEngine
             {
                 throw new Exception("Guessed word isn't in dictionary");
             }
-            var toRemove = new List<string>();
             for (int i = 0; i < permissibleWords.Length; i++)
             {
                 var word = permissibleWords[i];
@@ -156,16 +155,16 @@ namespace WordleEngine
                     continue;
                 }
                 var testOutcome = wordComparisons[guessedWordIndex, i];
-                if (guessOutcome.GetHashCode() != testOutcome.GetHashCode())
+                if (guessOutcome != testOutcome)
                 {
                     wordIsPossible[i] = false;
                     numberOfPossibleWords--;
                 }
             }
         }
-        Dictionary<int, double> GetProbabilites(int guessWordIndex)
+        double[] GetProbabilites(int guessWordIndex)
         {
-            Dictionary<int, double> outputs = new Dictionary<int, double>();
+            var outputs = new double[WordleOutcome.NumberOfMasks];
             for (int i = 0; i < permissibleWords.Length; i++)
             {
                 if (wordIsPossible[i] == false)
@@ -173,82 +172,13 @@ namespace WordleEngine
                     continue;
                 }
                 var mask = wordComparisons[guessWordIndex, i];
-                if (outputs.ContainsKey(mask.GetHashCode()) == false)
-                {
-                    outputs.Add(mask.GetHashCode(), 0);
-                }
-                outputs[mask.GetHashCode()]++;
+                outputs[mask]++;
             }
-            foreach(var v in outputs)
+            for(int i=0;i< WordleOutcome.NumberOfMasks; i++)
             {
-                outputs[v.Key] /= (double)numberOfPossibleWords;
+                outputs[i] /= (double)numberOfPossibleWords;
             }
             return outputs;
-        }
-        public static WordleMask Compare(string guess, string trueAnswer)
-        {
-            var outcomes = new List<LetterMatchOutcome>();
-            for (int i = 0; i < wordSize; i++)
-            {
-                char nextGuessChar = guess[i];
-                if (trueAnswer.Contains(nextGuessChar) == false)
-                {
-                    outcomes.Add(LetterMatchOutcome.Grey);
-                    continue;
-                }
-                if (trueAnswer[i] == nextGuessChar)
-                {
-                    outcomes.Add(LetterMatchOutcome.Green);
-                    continue;
-                }
-                outcomes.Add(LetterMatchOutcome.Yellow);
-            }
-            TrimRepeatedLetters(guess, trueAnswer, outcomes);
-            return new WordleMask(outcomes);
-        }
-        static void TrimRepeatedLetters(string guess, string trueAnswer, List<LetterMatchOutcome> outcomes)
-        {
-            var guessHistogram = GenerateLetterHistogram(guess);
-            var answerHistogram = GenerateLetterHistogram(trueAnswer);
-            foreach (char c in answerHistogram.Keys)
-            {
-                if (guessHistogram.ContainsKey(c) == false)
-                {
-                    continue;
-                }
-                if (guessHistogram[c] > answerHistogram[c])
-                {
-                    int numberOfYellowsToTrim = guessHistogram[c] - answerHistogram[c];
-                    for (int i = 0; i < numberOfYellowsToTrim; i++)
-                    {
-                        TrimExtraYellow(guess, c, outcomes);
-                    }
-                }
-            }
-        }
-        static Dictionary<char, int> GenerateLetterHistogram(string input)
-        {
-            var output = new Dictionary<char, int>();
-            foreach (char c in input)
-            {
-                if (output.ContainsKey(c) == false)
-                {
-                    output.Add(c, 0);
-                }
-                output[c]++;
-            }
-            return output;
-        }
-        static void TrimExtraYellow(string guess, char repeatedChar, List<LetterMatchOutcome> outcomes)
-        {
-            for (int i = wordSize - 1; i >= 0; i--)
-            {
-                if (guess[i] == repeatedChar && outcomes[i] == LetterMatchOutcome.Yellow)
-                {
-                    outcomes[i] = LetterMatchOutcome.Grey;
-                    return;
-                }
-            }
         }
     }
     public class WordleGuessInformation
@@ -277,35 +207,5 @@ namespace WordleEngine
         Grey,
         Yellow,
         Green
-    }
-    public class WordleMask
-    {
-        public readonly LetterMatchOutcome[] mask;
-        public WordleMask(List<LetterMatchOutcome> input)
-        {
-            mask = input.ToArray();
-        }
-        public bool Win()
-        {
-            for (int i = 0; i < mask.Length; i++)
-            {
-                if (mask[i] != LetterMatchOutcome.Green)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        public override int GetHashCode()
-        {
-            int output = 0;
-            for (int i = 0; i < mask.Length; i++)
-            {
-                int nextDigit = (int)mask[i];
-                int placeMultiplier = (int)Math.Pow(3, i);
-                output += nextDigit * placeMultiplier;
-            }
-            return output;
-        }
     }
 }
