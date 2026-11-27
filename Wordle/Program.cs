@@ -19,7 +19,11 @@
                     return;
                 }
                 using var reader = new StreamReader(dictionaryFilePath);
+                var sw = new Stopwatch();
+                sw.Start();
                 engine = new WordleEngine(reader);
+                sw.Stop();
+                Console.WriteLine(sw.ElapsedMilliseconds);
                 PlayWordleLoop(engine);
             }
         }

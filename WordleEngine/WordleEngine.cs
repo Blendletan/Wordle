@@ -10,7 +10,7 @@ namespace WordleEngine
         readonly string[] permissibleWords;
         bool[] wordIsPossible;
         int numberOfPossibleWords;
-        int[,] wordComparisons;
+        byte[,] wordComparisons;
         bool firstGuesmade;
         const string firstGuess = "tares";
         public WordleEngine(TextReader reader)
@@ -20,21 +20,19 @@ namespace WordleEngine
             int numberOfWords = permissibleWords.Length;
             wordIsPossible = new bool[numberOfWords];
             numberOfPossibleWords = numberOfWords;
-            wordComparisons = new int[numberOfWords, numberOfWords];
+            wordComparisons = new byte[numberOfWords, numberOfWords];
             for (int i = 0; i < numberOfWords; i++)
             {
                 wordIsPossible[i] = true;
             }
-            for (int i = 0; i < numberOfWords; i++)
+            Parallel.For(0, numberOfWords, i =>
             {
+                string guess = permissibleWords[i];
                 for (int j = 0; j < numberOfWords; j++)
                 {
-                    string firstWord = permissibleWords[i];
-                    string secondWord = permissibleWords[j];
-                    byte comparison = WordleOutcome.Compare(firstWord, secondWord);
-                    wordComparisons[i,j]= comparison;
+                    wordComparisons[i,j] = WordleOutcome.Compare(guess,permissibleWords[j]);
                 }
-            }
+            });
         }
         public List<string> GetDictionary()
         {
@@ -103,10 +101,16 @@ namespace WordleEngine
                 {
                     var maskProbability = maskProbabilities[j];
                     double probabilityOfGuess = maskProbability;
-                    double numberOfWordsRuledOut = (1 - probabilityOfGuess) * numberOfPossibleWords;
-                    expectedWordValue += probabilityOfGuess * numberOfWordsRuledOut;
+                    //double numberOfWordsRuledOut = (1 - probabilityOfGuess) * numberOfPossibleWords;
+                    double logOfProb = 0;
+                    if (probabilityOfGuess > 0)
+                    {
+                        logOfProb = Math.Log(probabilityOfGuess);
+                    }
+
+                    expectedWordValue -= probabilityOfGuess * logOfProb;
                 }
-                if (bestGuess == null && expectedWordValue > 0)
+                if (bestGuess == null)
                 {
                     bestGuess = permissibleWords[i];
                     bestGuessValue = expectedWordValue;
