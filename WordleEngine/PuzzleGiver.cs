@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -16,6 +16,10 @@ namespace WordleEngine
         public PuzzleGiver(string word)
         {
             TrueAnswer = word;
+        }
+        public byte CheckAnswer(string guess)
+        {
+            return WordleOutcome.Compare(guess, TrueAnswer);
         }
         static string GenerateAnswer(List<string> possibleWords)
         {

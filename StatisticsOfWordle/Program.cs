@@ -1,246 +1,166 @@
-﻿namespace StatisticsOfWordle
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using WordleEngine;
+using Engine = WordleEngine.WordleEngine;
+namespace StatisticsOfWordle
 {
-    using System.Text.Json;
-    using System.Text.Json.Serialization;
-    using WordleEngine;
     internal class Program
     {
         const string dictionaryFilePath = "official_wordle_all.txt";
         const string commonFilePath = "official_wordle_common.txt";
+        const string outputFilePath = "outputLarge.txt";
+        const int maxGuesses = 6;
         static void Main(string[] args)
         {
-            RunSimulation(5000, "outputLarge.txt");
-            SimulateParticularGame("eerie");
-        }
-        static void SimulateParticularGame(string word)
-        {
-            WordleEngine engine;
-            PuzzleGiver giver;
+            if (args.Length == 2 && args[0] == "--stats")
+            {
+                ShowStatistics(args[1]);
+                return;
+            }
+            if (args.Length != 0 && !(args.Length == 2 && args[0] == "--game"))
+            {
+                Console.WriteLine("Usage: [--game answer | --stats file]");
+                return;
+            }
             try
             {
                 using var reader = new StreamReader(dictionaryFilePath);
                 using var readerCommon = new StreamReader(commonFilePath);
-                engine = new WordleEngine(reader,readerCommon);
-                giver = new PuzzleGiver(word);
-            }
-            catch
-            {
-                Console.WriteLine("Cannot find dictionary file words.txt");
-                Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
-                return;
-            }
-            string guess = engine.NextGuess().BestGuess;
-            Console.WriteLine($"Computer guesses {guess}");
-            var outcome = giver.CheckAnswer(guess);
-            Console.WriteLine($"{outcome.mask[0]} {outcome.mask[1]} {outcome.mask[2]} {outcome.mask[3]} {outcome.mask[4]}");
-            int wordsRemaining = engine.NumberOfRemainingWords();
-            Console.WriteLine($"There are {wordsRemaining} words remaining");
-            if (outcome.Win())
-            {
-                Console.WriteLine("Computer won in 1 guess");
-                engine.Reset();
-                giver.Reset(engine.GetDictionary());
-                return;
-            }
-            for (int i = 0; i < 5; i++)
-            {
-                engine.UpdateInfo(guess, outcome);
-                guess = engine.NextGuess().BestGuess;
-                outcome = giver.CheckAnswer(guess);
-                wordsRemaining = engine.NumberOfRemainingWords();
-                Console.WriteLine($"Computer guesses {guess}");
-                Console.WriteLine($"{outcome.mask[0]} {outcome.mask[1]} {outcome.mask[2]} {outcome.mask[3]} {outcome.mask[4]}");
-                Console.WriteLine($"There are {wordsRemaining} words remaining");
-                if (outcome.Win())
+                var timer = Stopwatch.StartNew();
+                var engine = new Engine(reader, readerCommon);
+                var answers = engine.GetAnswerDictionary();
+                if (answers.Count == 0)
+                    throw new InvalidOperationException("The answer dictionary is empty.");
+                Console.WriteLine($"Initialized engine in {timer.Elapsed.TotalMilliseconds:F1} ms.");
+                // The first guess is identical for every game in this experiment.
+                timer.Restart();
+                string openingGuess = engine.NextGuess().BestGuess;
+                Console.WriteLine($"Opening guess: {openingGuess} ({timer.Elapsed.TotalMilliseconds:F1} ms)");
+                if (args.Length == 2)
                 {
-                    engine.Reset();
-                    giver.Reset(engine.GetDictionary());
-                    Console.WriteLine($"Computer won in {i + 1} guesses");
+                    string answer = args[1].ToLowerInvariant();
+                    if (!answers.Contains(answer))
+                    {
+                        Console.WriteLine($"'{answer}' is not in the answer dictionary.");
+                        return;
+                    }
+                    var result = SimulateWordleGame(engine, new PuzzleGiver(answer), openingGuess);
+                    PrintGame(result);
                     return;
                 }
+                RunSimulation(engine, answers, openingGuess, outputFilePath);
+                ShowStatistics(outputFilePath);
             }
+            catch (IOException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+            }
+        }
+        static SimulationGameInfo SimulateWordleGame(
+            Engine engine, PuzzleGiver giver, string openingGuess)
+        {
             engine.Reset();
-            giver.Reset(engine.GetDictionary());
-            return;
+            var result = new SimulationGameInfo { TrueAnswer = giver.TrueAnswer };
+            for (int turn = 1; turn <= maxGuesses; turn++)
+            {
+                string guess = turn == 1 ? openingGuess : engine.NextGuess().BestGuess;
+                byte outcome = giver.CheckAnswer(guess);
+                engine.UpdateInfo(guess, outcome);
+                int remaining = engine.NumberOfRemainingWords();
+                if (remaining == 0)
+                    throw new InvalidOperationException($"No answers remain for '{giver.TrueAnswer}' after '{guess}'.");
+                result.Guesses.Add(guess);
+                result.Outcomes.Add(outcome);
+                result.WordsRemaining.Add(remaining);
+                if (WordleOutcome.Win(outcome))
+                {
+                    if (remaining != 1)
+                        throw new InvalidOperationException("Winning feedback did not leave exactly one answer.");
+                    result.GameWon = true;
+                    break;
+                }
+            }
+            return result;
+        }
+        static void RunSimulation(Engine engine, List<string> answers,
+            string openingGuess, string outputPath)
+        {
+            var timer = Stopwatch.StartNew();
+            using var writer = new StreamWriter(outputPath);
+            for (int i = 0; i < answers.Count; i++)
+            {
+                var result = SimulateWordleGame(engine, new PuzzleGiver(answers[i]), openingGuess);
+                writer.WriteLine(JsonSerializer.Serialize(result));
+                if ((i + 1) % 100 == 0 || i + 1 == answers.Count)
+                    Console.WriteLine($"Completed {i + 1}/{answers.Count} games ({timer.Elapsed.TotalSeconds:F1} s)");
+            }
+            Console.WriteLine($"Simulation time: {timer.Elapsed.TotalSeconds:F2} s");
+        }
+        static void PrintGame(SimulationGameInfo game)
+        {
+            Console.WriteLine($"Answer: {game.TrueAnswer}");
+            for (int i = 0; i < game.Guesses.Count; i++)
+            {
+                var outcomes = WordleOutcome.GetLetterOutcomes(game.Outcomes[i]);
+                Console.WriteLine($"{i + 1}. {game.Guesses[i]}: {string.Join(" ", outcomes)} | {game.WordsRemaining[i]} remaining");
+            }
+            Console.WriteLine(game.GameWon ? $"Won in {game.Guesses.Count} guesses." : "Lost in six guesses.");
         }
         static void ShowStatistics(string dataFile)
         {
-            var reader = new StreamReader(dataFile);
-            int[] results = new int[7];
-            var secondGuesses = new Dictionary<string, int>();
-            var thirdGuesses = new Dictionary<string, int>();
-            string? nextLine = reader.ReadLine();
-            while (true)
+            var games = File.ReadLines(dataFile)
+                .Select(line => JsonSerializer.Deserialize<SimulationGameInfo>(line)
+                    ?? throw new InvalidOperationException("Unable to deserialize game."))
+                .ToList();
+            if (games.Count == 0)
             {
-                if (nextLine == null)
-                {
-                    break;
-                }
-                var gameInfo = ReadInfo(nextLine);
-                int numberOfTurns = gameInfo.Guesses.Count;
-                if (gameInfo.GameWon == false)
-                {
-                    numberOfTurns = 0;
-                }
-                results[numberOfTurns]++;
-                if (gameInfo.Guesses.Count > 1)
-                {
-                    string secondGuess = gameInfo.Guesses[1];
-                    if (secondGuesses.ContainsKey(secondGuess) == false)
-                    {
-                        secondGuesses.Add(secondGuess, 0);
-                    }
-                    secondGuesses[secondGuess]++;
-                }
-                if (gameInfo.Guesses.Count > 2)
-                {
-                    string thirdGuess = gameInfo.Guesses[2];
-                    if (thirdGuesses.ContainsKey(thirdGuess) == false)
-                    {
-                        thirdGuesses.Add(thirdGuess, 0);
-                    }
-                    thirdGuesses[thirdGuess]++;
-                }
-                nextLine = reader.ReadLine();
-            }
-            reader.Dispose();
-            int numberOfLosses = results[0];
-            int totalNumberOfGames = results.Sum();
-            Console.WriteLine($"There were {numberOfLosses} games that the computer lost");
-            for (int i = 1; i < 7; i++)
-            {
-                int numberOfGames = results[i];
-                double percentage = 100.0 * (double)numberOfGames / (double)totalNumberOfGames;
-                Console.WriteLine($"There were {numberOfGames} games that the computer won in {i} turns, or {percentage}%");
-            }
-            var myList = secondGuesses.ToList();
-            myList.Sort((x, y) => x.Value.CompareTo(y.Value));
-            myList.Reverse();
-            double total = myList.Sum(x => x.Value);
-            Console.WriteLine($"There were {(int)total} games that went for at least two turns");
-            for (int i = 1; i <= 25; i++)
-            {
-                var guess = myList[i - 1];
-                double percentage = 100.0 * (double)guess.Value / (double)total;
-                Console.WriteLine($"Second guess number {i} was {guess.Key} with {guess.Value} appearances or {percentage}%");
-            }
-            myList = thirdGuesses.ToList();
-            myList.Sort((x, y) => x.Value.CompareTo(y.Value));
-            myList.Reverse();
-            total = myList.Sum(x => x.Value);
-            Console.WriteLine($"There were {(int)total} games that went for at least three turns");
-            for (int i = 1; i <= 25; i++)
-            {
-                var guess = myList[i - 1];
-                double percentage = 100.0 * (double)guess.Value / (double)total;
-                Console.WriteLine($"Third guess number {i} was {guess.Key} with {guess.Value} appearances or {percentage}%");
-            }
-        }
-        static void CleanUpDataFile(string inputFilePath, string outputFilePath)
-        {
-            string? nextLine;
-            StreamReader reader;
-            StreamWriter writer = new StreamWriter(outputFilePath);
-            try
-            {
-                reader = new StreamReader(inputFilePath);
-            }
-            catch
-            {
-                Console.WriteLine($"Cannot open file at {inputFilePath}");
+                Console.WriteLine("No games found.");
                 return;
             }
-            while (true)
+            var wins = games.Where(g => g.GameWon).ToList();
+            var losses = games.Where(g => !g.GameWon).ToList();
+            Console.WriteLine($"Games: {games.Count}");
+            Console.WriteLine($"Won: {wins.Count} ({100.0 * wins.Count / games.Count:F2}%)");
+            Console.WriteLine($"Lost: {losses.Count} ({100.0 * losses.Count / games.Count:F2}%)");
+            for (int turn = 1; turn <= maxGuesses; turn++)
             {
-                nextLine = reader.ReadLine();
-                if (nextLine == null)
-                {
-                    break;
-                }
-                nextLine = reader.ReadLine();
-                if (nextLine == null)
-                {
-                    break;
-                }
-                writer.WriteLine(nextLine);
-                nextLine = reader.ReadLine();
-                if (nextLine == null)
-                {
-                    break;
-                }
+                int count = wins.Count(g => g.Guesses.Count == turn);
+                Console.WriteLine($"{turn} guesses: {count} ({100.0 * count / games.Count:F2}%)");
             }
-            reader.Dispose();
-            writer.Dispose();
+            if (wins.Count > 0)
+                Console.WriteLine($"Mean guesses (wins only): {wins.Average(g => g.Guesses.Count):F4}");
+            Console.WriteLine($"Mean guesses played (including losses): {games.Average(g => g.Guesses.Count):F4}");
+            if (losses.Count > 0)
+            {
+                Console.WriteLine("Unsolved answers:");
+                foreach (var game in losses)
+                    Console.WriteLine($"{game.TrueAnswer}: {string.Join(", ", game.Guesses)}");
+            }
+            ShowGuessFrequencies(games, 2);
+            ShowGuessFrequencies(games, 3);
         }
-        static void RunSimulation(int numberOfTrials, string outputFilePath)
+        static void ShowGuessFrequencies(List<SimulationGameInfo> games, int turn)
         {
-            WordleEngine engine;
-            PuzzleGiver giver;
-            int dictionarySize = 0;
-            try
+            var reached = games.Where(g => g.Guesses.Count >= turn).ToList();
+            Console.WriteLine($"\nMost frequent guesses on turn {turn} ({reached.Count} games):");
+            foreach (var group in reached.GroupBy(g => g.Guesses[turn - 1])
+                .OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(25))
             {
-                using var reader = new StreamReader(dictionaryFilePath);
-                using var readerCommon = new StreamReader(commonFilePath);
-                engine = new WordleEngine(reader, readerCommon);
-                giver = new PuzzleGiver(word);
+                Console.WriteLine($"{group.Key}: {group.Count()} ({100.0 * group.Count() / reached.Count:F2}%)");
             }
-            catch
-            {
-                Console.WriteLine("Cannot find dictionary file words.txt");
-                Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
-                return;
-            }
-            Console.WriteLine($"There are {dictionarySize} words in the dictionary");
-            TextWriter writer = new StreamWriter(outputFilePath);
-            for (int i = 0; i < numberOfTrials; i++)
-            {
-                Console.WriteLine($"Beginning game {i + 1}");
-                var outcome = SimulateWordleGame(engine, giver);
-                var options = new JsonSerializerOptions();
-                string output = JsonSerializer.Serialize<WordleGameInfo>(outcome, options);
-                writer.WriteLine(output);
-            }
-            writer.Close();
         }
-        static WordleGameInfo ReadInfo(string serialized)
-        {
-            WordleGameInfo? output = JsonSerializer.Deserialize<WordleGameInfo>(serialized);
-            if (output == null)
-            {
-                throw new Exception("Unable to deserialize JSON");
-            }
-            return output;
-        }
-        static WordleGameInfo SimulateWordleGame(WordleEngine engine, PuzzleGiver giver)
-        {
-            var output = new WordleGameInfo(giver.TrueAnswer);
-            string guess = engine.FirstGuess();
-            var outcome = giver.CheckAnswer(guess);
-            int wordsRemaining = engine.NumberOfRemainingWords();
-            output.Update(guess, outcome, wordsRemaining);
-            if (outcome.Win())
-            {
-                engine.Reset();
-                giver.Reset(engine.GetDictionary());
-                return output;
-            }
-            for (int i = 0; i < 5; i++)
-            {
-                engine.UpdateInfo(guess, outcome);
-                guess = engine.NextGuess().BestGuess;
-                outcome = giver.CheckAnswer(guess);
-                wordsRemaining = engine.NumberOfRemainingWords();
-                output.Update(guess, outcome, wordsRemaining);
-                if (outcome.Win())
-                {
-                    engine.Reset();
-                    giver.Reset(engine.GetDictionary());
-                    return output;
-                }
-            }
-            engine.Reset();
-            giver.Reset(engine.GetDictionary());
-            return output;
-        }*/
+    }
+    // New JSON-lines schema, independent of the old, unavailable WordleGameInfo.
+    public class SimulationGameInfo
+    {
+        public string TrueAnswer { get; set; } = "";
+        public bool GameWon { get; set; }
+        public List<string> Guesses { get; set; } = new List<string>();
+        public List<byte> Outcomes { get; set; } = new List<byte>();
+        public List<int> WordsRemaining { get; set; } = new List<int>();
     }
 }

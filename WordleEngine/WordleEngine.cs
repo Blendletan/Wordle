@@ -1,15 +1,10 @@
-﻿using Newtonsoft.Json.Linq;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection.PortableExecutable;
-using System.Security.Cryptography;
 namespace WordleEngine
 {
     public class WordleEngine
     {
         Stopwatch sw;
         readonly string[] permissibleWords;
-        //bool[] wordIsPossible;
         List<int>? possibleWordIndices;
         readonly int numberOfCommonWords;
         byte[,] wordComparisons;
@@ -31,14 +26,9 @@ namespace WordleEngine
                 throw new Exception("Unexpected dictionary");
             }
             permissibleWords = commonWords.Concat(rawPermissibleWords.Where(w => !commonSet.Contains(w))).ToArray();
-            //wordIsPossible = new bool[numberOfCommonWords];
             wordComparisons = new byte[numberOfWords, numberOfCommonWords];
             entropyTable = new double[numberOfCommonWords + 1];
             entropyTable[0] = 0;
-            /*for(int i=0;i<numberOfCommonWords;i++)
-            {
-                wordIsPossible[i] = true;
-            }*/
             for (int i = 0; i < numberOfCommonWords; i++)
             {
                 entropyTable[i + 1] = (i+1)*Math.Log(i + 1);
@@ -78,9 +68,13 @@ namespace WordleEngine
             }
             return possibleWordIndices.BinarySearch(wordIndex) >= 0;
         }
-        public List<string> GetDictionary()
+        public List<string> GetAnswerDictionary()
         {
-            return new List<string>(permissibleWords);
+            return permissibleWords.Take(numberOfCommonWords).ToList();
+        }
+        public int NumberOfRemainingWords()
+        {
+            return possibleWordIndices?.Count ?? numberOfCommonWords;
         }
         public static List<string> ReadDictionaryFile(TextReader reader)
         {
@@ -103,10 +97,6 @@ namespace WordleEngine
         public void Reset()
         {
             possibleWordIndices = null;
-            /*for (int i = 0; i < numberOfCommonWords; i++)
-            {
-                wordIsPossible[i] = true;
-            }*/
         }
         public bool WordAdmissible(string input)
         {
@@ -174,7 +164,7 @@ namespace WordleEngine
             {
                 secondBestGuess = permissibleWords[secondBestGuessIndex.Value];
             }
-            output = new WordleGuessInformation(bestGuess, secondBestGuess, sw.ElapsedMilliseconds, numberOfPossibleWords);
+            output = new WordleGuessInformation(bestGuess, secondBestGuess, sw.Elapsed.TotalMilliseconds, numberOfPossibleWords);
             return output;
         }
         bool IsBetterGuess(int candidate, double candidateScore, int? incumbent, double? incumbentScore)
