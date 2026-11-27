@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
 namespace WordleEngine
 {
     public static class WordleOutcome
@@ -34,43 +33,86 @@ namespace WordleEngine
             }
             return output;
         }
-        public static byte Compare(string guess,string trueAnswer)
+        public static (byte normalOutput, byte reversedOutput) CompareBoth(string guess, string answer)
         {
-            //match green
-            Span<bool> isUsed = stackalloc bool[GlobalConstants.WordSize];
-            isUsed.Clear();
-            int output = 0;
-            int placeMultiplier = 1;
-            for(int i=0;i<GlobalConstants.WordSize;i++, placeMultiplier *= 3)
+            int greenPositions = 0;
+            int outputA = 0;
+            int weightA = 1;
+            // Match greens.
+            for (int i = 0; i < GlobalConstants.WordSize;i++, weightA *= 3)
             {
-                if (guess[i] == trueAnswer[i])
+                if (guess[i] == answer[i])
                 {
-                    isUsed[i] = true;
-                    output += (placeMultiplier * 2);
+                    greenPositions |= 1 << i;
+                    outputA += 2 * weightA;
                 }
             }
-            placeMultiplier = 1;
-            for (int i=0;i<GlobalConstants.WordSize;i++, placeMultiplier *= 3)
+            int outputB = outputA;
+            int usedB = greenPositions;
+            // Match yellows.
+            weightA = 1;
+            for (int i = 0; i < GlobalConstants.WordSize;i++, weightA *= 3)
             {
-                if (guess[i] == trueAnswer[i])
+                if ((greenPositions & (1 << i)) != 0)
                 {
                     continue;
                 }
-                for (int j=0;j<GlobalConstants.WordSize;j++)
+                int weightB = 1;
+                for (int j = 0; j < GlobalConstants.WordSize;j++, weightB *= 3)
                 {
-                    if (isUsed[j])
+                    if ((usedB & (1 << j)) != 0)
                     {
                         continue;
                     }
-                    if (guess[i] == trueAnswer[j])
+                    if (guess[i] == answer[j])
                     {
-                        isUsed[j] = true;
-                        output += placeMultiplier;
+                        usedB |= 1 << j;
+                        outputA += weightA;
+                        outputB += weightB;
                         break;
                     }
                 }
             }
-            return (byte)output;
+            return ((byte)outputA, (byte)outputB);
+        }
+        public static byte Compare(string guess, string answer)
+        {
+            int greenPositions = 0;
+            int usedAnswerPositions = 0;
+            int mask = 0;
+            int weight = 1;
+            // Match all greens first.
+            for (int i = 0; i < GlobalConstants.WordSize; i++)
+            {
+                if (guess[i] == answer[i])
+                {
+                    greenPositions |= 1 << i;
+                    usedAnswerPositions |= 1 << i;
+                    mask += 2 * weight;
+                }
+                weight *= 3;
+            }
+            // Match yellows against remaining answer letters.
+            weight = 1;
+            for (int i = 0; i < GlobalConstants.WordSize; i++)
+            {
+                if ((greenPositions & (1 << i)) == 0)
+                {
+                    for (int j = 0; j < GlobalConstants.WordSize; j++)
+                    {
+                        if ((usedAnswerPositions & (1 << j)) != 0)
+                            continue;
+                        if (guess[i] == answer[j])
+                        {
+                            usedAnswerPositions |= 1 << j;
+                            mask += weight;
+                            break;
+                        }
+                    }
+                }
+                weight *= 3;
+            }
+            return (byte)mask;
         }
         public static bool Win(byte input)
         {

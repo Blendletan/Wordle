@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using Newtonsoft.Json.Linq;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
@@ -8,31 +9,74 @@ namespace WordleEngine
     {
         Stopwatch sw;
         readonly string[] permissibleWords;
-        bool[] wordIsPossible;
-        int numberOfPossibleWords;
+        //bool[] wordIsPossible;
+        List<int>? possibleWordIndices;
+        readonly int numberOfCommonWords;
         byte[,] wordComparisons;
-        bool firstGuesmade;
-        const string firstGuess = "tares";
-        public WordleEngine(TextReader reader)
+        double[] entropyTable;
+        public WordleEngine(TextReader dictionaryReader,TextReader commonReader)
         {
+            possibleWordIndices = null;
             sw = new Stopwatch();
-            permissibleWords = ReadDictionaryFile(reader).ToArray();
-            int numberOfWords = permissibleWords.Length;
-            wordIsPossible = new bool[numberOfWords];
-            numberOfPossibleWords = numberOfWords;
-            wordComparisons = new byte[numberOfWords, numberOfWords];
-            for (int i = 0; i < numberOfWords; i++)
+            var commonWords = ReadDictionaryFile(commonReader);
+            numberOfCommonWords = commonWords.Count;
+            var rawPermissibleWords = ReadDictionaryFile(dictionaryReader);
+            int numberOfWords = rawPermissibleWords.Count;
+            var commonSet = commonWords.ToHashSet();
+            var permissibleSet = rawPermissibleWords.ToHashSet();
+            if (commonSet.Count != commonWords.Count ||
+                permissibleSet.Count != rawPermissibleWords.Count ||
+                !commonSet.IsSubsetOf(permissibleSet))
+            {
+                throw new Exception("Unexpected dictionary");
+            }
+            permissibleWords = commonWords.Concat(rawPermissibleWords.Where(w => !commonSet.Contains(w))).ToArray();
+            //wordIsPossible = new bool[numberOfCommonWords];
+            wordComparisons = new byte[numberOfWords, numberOfCommonWords];
+            entropyTable = new double[numberOfCommonWords + 1];
+            entropyTable[0] = 0;
+            /*for(int i=0;i<numberOfCommonWords;i++)
             {
                 wordIsPossible[i] = true;
+            }*/
+            for (int i = 0; i < numberOfCommonWords; i++)
+            {
+                entropyTable[i + 1] = (i+1)*Math.Log(i + 1);
             }
             Parallel.For(0, numberOfWords, i =>
             {
                 string guess = permissibleWords[i];
-                for (int j = 0; j < numberOfWords; j++)
+                if (i < numberOfCommonWords)
                 {
-                    wordComparisons[i,j] = WordleOutcome.Compare(guess,permissibleWords[j]);
+                    wordComparisons[i, i] = 242;
+                    for (int j = i + 1; j < numberOfCommonWords; j++)
+                    {
+                        var (ab, ba) = WordleOutcome.CompareBoth(guess, permissibleWords[j]);
+                        wordComparisons[i, j] = ab;
+                        wordComparisons[j, i] = ba;
+                    }
+                }
+                else
+                {
+                    for (int j = 0; j < numberOfCommonWords; j++)
+                    {
+                        wordComparisons[i, j] = WordleOutcome.Compare(
+                            guess, permissibleWords[j]);
+                    }
                 }
             });
+        }
+        private bool WordIsPossible(int wordIndex)
+        {
+            if (wordIndex >= numberOfCommonWords)
+            {
+                return false;
+            }
+            if (possibleWordIndices==null)
+            {
+                return true;
+            }
+            return possibleWordIndices.BinarySearch(wordIndex) >= 0;
         }
         public List<string> GetDictionary()
         {
@@ -48,9 +92,9 @@ namespace WordleEngine
             var output = new List<string>();
             while (nextLine != null)
             {
-                if (nextLine.Count() == GlobalConstants.WordSize)
+                if (nextLine.Length == GlobalConstants.WordSize)
                 {
-                    output.Add(nextLine.ToLower());
+                    output.Add(nextLine.ToLowerInvariant());
                 }
                 nextLine = reader.ReadLine();
             }
@@ -58,83 +102,96 @@ namespace WordleEngine
         }
         public void Reset()
         {
-            int numberOfWords = permissibleWords.Length;
-            numberOfPossibleWords = numberOfWords;
-            for (int i = 0; i < numberOfWords; i++)
+            possibleWordIndices = null;
+            /*for (int i = 0; i < numberOfCommonWords; i++)
             {
                 wordIsPossible[i] = true;
-            }
+            }*/
         }
         public bool WordAdmissible(string input)
         {
-            if (permissibleWords.Contains(input))
-            {
-                return true;
-            }
-            return false;
+            return permissibleWords.Contains(input);
         }
         public WordleGuessInformation NextGuess()
         {
             WordleGuessInformation output;
-            sw.Restart();
-            string? bestGuess = null;
-            double? bestGuessValue = null;
-            string? secondBestGuess = null;
-            double? secondBestGuessValue = null;
-            if (numberOfPossibleWords == 1)
+            int numberOfPossibleWords = numberOfCommonWords;
+            if (possibleWordIndices != null)
             {
-                for (int i = 0; i < permissibleWords.Length; i++)
+                numberOfPossibleWords = possibleWordIndices.Count;
+            }
+            sw.Restart();
+            int? bestGuessIndex = null;
+            double? bestGuessValue = null;
+            int? secondBestGuessIndex = null;
+            double? secondBestGuessValue = null;
+            if (possibleWordIndices != null)
+            {
+                if (possibleWordIndices.Any()==false)
                 {
-                    if (wordIsPossible[i])
-                    {
-                        sw.Stop();
-                        output = new WordleGuessInformation(permissibleWords[i], secondBestGuess, sw.ElapsedMilliseconds, numberOfPossibleWords);
-                        return output;
-                    }
+                    throw new InvalidOperationException("No possible answers remain.");
+                }
+                if (possibleWordIndices.Count == 1)
+                {
+                    sw.Stop();
+                    string outputWord = permissibleWords[possibleWordIndices.First()];
+                    output = new WordleGuessInformation(outputWord, null, sw.Elapsed.TotalMilliseconds, numberOfPossibleWords);
+                    return output;
                 }
             }
+            Span<int> maskCounts = stackalloc int[WordleOutcome.NumberOfMasks];
             for (int i = 0; i < permissibleWords.Length; i++)
             {
-                double expectedWordValue = 0;
-                var maskProbabilities = GetProbabilites(i);
+                double score = 0;
+                GetMaskCounts(i,maskCounts);
                 for(int j=0;j<WordleOutcome.NumberOfMasks;j++)
                 {
-                    var maskProbability = maskProbabilities[j];
-                    double probabilityOfGuess = maskProbability;
-                    //double numberOfWordsRuledOut = (1 - probabilityOfGuess) * numberOfPossibleWords;
-                    double logOfProb = 0;
-                    if (probabilityOfGuess > 0)
-                    {
-                        logOfProb = Math.Log(probabilityOfGuess);
-                    }
-
-                    expectedWordValue -= probabilityOfGuess * logOfProb;
+                    var maskCount = maskCounts[j];
+                    double entropy = entropyTable[maskCount];
+                    score += entropy;
                 }
-                if (bestGuess == null)
+                if (IsBetterGuess(i,score,bestGuessIndex,bestGuessValue))
                 {
-                    bestGuess = permissibleWords[i];
-                    bestGuessValue = expectedWordValue;
-                }
-                else if (expectedWordValue > bestGuessValue)
-                {
-                    secondBestGuess = bestGuess;
+                    secondBestGuessIndex = bestGuessIndex;
                     secondBestGuessValue = bestGuessValue;
-                    bestGuess = permissibleWords[i];
-                    bestGuessValue = expectedWordValue;
+                    bestGuessIndex = i;
+                    bestGuessValue = score;
                 }
-                else if (secondBestGuess == null || expectedWordValue > secondBestGuessValue)
+                else if (IsBetterGuess(i, score, secondBestGuessIndex, secondBestGuessValue))
                 {
-                    secondBestGuess = permissibleWords[i];
-                    secondBestGuessValue = expectedWordValue;
+                    secondBestGuessIndex = i;
+                    secondBestGuessValue = score;
                 }
             }
-            if (bestGuess == null)
+            if (bestGuessIndex == null)
             {
                 throw new Exception("Couldn't make a guess");
             }
             sw.Stop();
+            string bestGuess = permissibleWords[bestGuessIndex.Value];
+            string? secondBestGuess = null;
+            if (secondBestGuessIndex != null)
+            {
+                secondBestGuess = permissibleWords[secondBestGuessIndex.Value];
+            }
             output = new WordleGuessInformation(bestGuess, secondBestGuess, sw.ElapsedMilliseconds, numberOfPossibleWords);
             return output;
+        }
+        bool IsBetterGuess(int candidate, double candidateScore, int? incumbent, double? incumbentScore)
+        {
+            if (incumbent == null)
+            {
+                return true;
+            }
+            if (candidateScore < incumbentScore)
+            {
+                return true;
+            }
+            if (candidateScore > incumbentScore)
+            {
+                return false;
+            }
+            return WordIsPossible(incumbent.Value) == false && WordIsPossible(candidate);
         }
         public void UpdateInfo(string guess, byte guessOutcome)
         {
@@ -151,38 +208,40 @@ namespace WordleEngine
             {
                 throw new Exception("Guessed word isn't in dictionary");
             }
-            for (int i = 0; i < permissibleWords.Length; i++)
+            if (possibleWordIndices==null)
             {
-                var word = permissibleWords[i];
-                if (wordIsPossible[i] == false)
+                possibleWordIndices = new List<int>();
+                for (int i = 0; i < numberOfCommonWords; i++)
                 {
-                    continue;
+                    var testOutcome = wordComparisons[guessedWordIndex, i];
+                    if (guessOutcome == testOutcome)
+                    {
+                        possibleWordIndices.Add(i);
+                    }
                 }
-                var testOutcome = wordComparisons[guessedWordIndex, i];
-                if (guessOutcome != testOutcome)
-                {
-                    wordIsPossible[i] = false;
-                    numberOfPossibleWords--;
-                }
+            }
+            else
+            {
+                possibleWordIndices.RemoveAll(i => wordComparisons[guessedWordIndex, i] != guessOutcome);
             }
         }
-        double[] GetProbabilites(int guessWordIndex)
+        void GetMaskCounts(int guessWordIndex, Span<int> counts)
         {
-            var outputs = new double[WordleOutcome.NumberOfMasks];
-            for (int i = 0; i < permissibleWords.Length; i++)
+            counts.Clear();
+            if (possibleWordIndices == null)
             {
-                if (wordIsPossible[i] == false)
+                for (int i = 0; i < numberOfCommonWords; i++)
                 {
-                    continue;
+                    counts[wordComparisons[guessWordIndex, i]]++;
                 }
-                var mask = wordComparisons[guessWordIndex, i];
-                outputs[mask]++;
             }
-            for(int i=0;i< WordleOutcome.NumberOfMasks; i++)
+            else
             {
-                outputs[i] /= (double)numberOfPossibleWords;
+                foreach (int i in possibleWordIndices)
+                {
+                    counts[wordComparisons[guessWordIndex, i]]++;
+                }
             }
-            return outputs;
         }
     }
     public class WordleGuessInformation

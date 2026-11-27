@@ -5,26 +5,23 @@
     using WordleEngine;
     internal class Program
     {
-        //place a dictionary file named words.txt in the same folder as the executable
-        const string dictionaryPath = "words.txt";
+        const string dictionaryFilePath = "official_wordle_all.txt";
+        const string commonFilePath = "official_wordle_common.txt";
         static void Main(string[] args)
         {
-            //ShowStatistics("outputLarge.txt");
-            //RunSimulation(5000, "outputLarge.txt");
-            //SimulateParticularGame("eerie");
+            RunSimulation(5000, "outputLarge.txt");
+            SimulateParticularGame("eerie");
         }
-        /*
         static void SimulateParticularGame(string word)
         {
             WordleEngine engine;
             PuzzleGiver giver;
             try
             {
-                using (var reader = new StreamReader(dictionaryPath))
-                {
-                    engine = new WordleEngine(reader);
-                    giver = new PuzzleGiver(word);
-                }
+                using var reader = new StreamReader(dictionaryFilePath);
+                using var readerCommon = new StreamReader(commonFilePath);
+                engine = new WordleEngine(reader,readerCommon);
+                giver = new PuzzleGiver(word);
             }
             catch
             {
@@ -32,7 +29,7 @@
                 Console.WriteLine("Please make sure a dictionary named words.txt is inside the same folder as this executable");
                 return;
             }
-            string guess = engine.FirstGuess();
+            string guess = engine.NextGuess().BestGuess;
             Console.WriteLine($"Computer guesses {guess}");
             var outcome = giver.CheckAnswer(guess);
             Console.WriteLine($"{outcome.mask[0]} {outcome.mask[1]} {outcome.mask[2]} {outcome.mask[3]} {outcome.mask[4]}");
@@ -182,13 +179,10 @@
             int dictionarySize = 0;
             try
             {
-                using (var reader = new StreamReader(dictionaryPath))
-                {
-                    engine = new WordleEngine(reader);
-                    var words = engine.GetDictionary();
-                    dictionarySize = words.Count;
-                    giver = new PuzzleGiver(words);
-                }
+                using var reader = new StreamReader(dictionaryFilePath);
+                using var readerCommon = new StreamReader(commonFilePath);
+                engine = new WordleEngine(reader, readerCommon);
+                giver = new PuzzleGiver(word);
             }
             catch
             {

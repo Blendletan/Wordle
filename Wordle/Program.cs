@@ -8,7 +8,8 @@
     internal class Program
     {
         //place a dictionary file named words.txt in the same folder as the executable
-        const string dictionaryFilePath = "words.txt";
+        const string dictionaryFilePath = "official_wordle_all.txt";
+        const string commonFilePath = "official_wordle_common.txt";
         static void Main(string[] args)
         {
             {
@@ -19,11 +20,12 @@
                     return;
                 }
                 using var reader = new StreamReader(dictionaryFilePath);
+                using var readerCommon = new StreamReader(commonFilePath);
                 var sw = new Stopwatch();
                 sw.Start();
-                engine = new WordleEngine(reader);
+                engine = new WordleEngine(reader, readerCommon);
                 sw.Stop();
-                Console.WriteLine(sw.ElapsedMilliseconds);
+                Console.WriteLine(sw.Elapsed.TotalMilliseconds);
                 PlayWordleLoop(engine);
             }
         }
